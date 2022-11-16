@@ -34,22 +34,157 @@ static           ID3D10Blob*                 pPSCode              = nullptr;
 below will be modified according to app's needs
 *******************************************************************************1
 */
-struct Vertex
+// Mip Count
+using DirectX::XMFLOAT2;
+using DirectX::XMFLOAT3;
+const UINT NumMips = 6;
+float Colors[NumMips][4] =
 {
-	Vertex() { }
-	Vertex(float x, float y, float z, float r, float g, float b)
-		: pos(x, y, z), color(r,g,b) { }
-	DirectX::XMFLOAT3 pos;
-	DirectX::XMFLOAT3 color;
+	{1.f, 0.f, 0.f, 1.f},  // LOD0 - Red
+	{1.f, 0.f, 1.f, 1.f},  // LOD1 - Magenta
+	{0.f, 0.f, 1.f, 1.f},  // LOD2 - Blue
+	{0.f, 1.f, 1.f, 1.f},  // LOD3 - Cyan
+	{0.f, 1.f, 0.f, 1.f},  // LOD4 - Green
+	{1.f, 1.f, 0.f, 1.f},  // LOD5 - Yellow
+};
+typedef struct Vertex
+{
+	DirectX::XMFLOAT2	tex;
+	float		        lod;
+	DirectX::XMFLOAT3	pos;
+};
+// Vertex data
+Vertex vertex[] =
+{
+	// TexCoord   LOD   Position
+
+	// LOD 0 Tri
+	{ XMFLOAT2(0.5f, 0.0f), 0.0f, XMFLOAT3(-0.5f,  1.00f,  0.5f) },
+	{ XMFLOAT2(1.0f, 1.0f), 0.0f, XMFLOAT3(0.0f,  0.34f,  0.5f) },
+	{ XMFLOAT2(0.0f, 1.0f), 0.0f, XMFLOAT3(-1.0f,  0.34f,  0.5f) },
+
+	// LOD 1 Tri
+	{ XMFLOAT2(0.5f, 0.0f), 1.0f, XMFLOAT3(0.5f,  1.00f,  0.5f) },
+	{ XMFLOAT2(1.0f, 1.0f), 1.0f, XMFLOAT3(1.0f,  0.34f,  0.5f) },
+	{ XMFLOAT2(0.0f, 1.0f), 1.0f, XMFLOAT3(0.0f,  0.34f,  0.5f) },
+
+	// LOD 2 Tri
+	{ XMFLOAT2(0.5f, 0.0f), 2.0f, XMFLOAT3(-0.5f,  0.33f,  0.5f) },
+	{ XMFLOAT2(1.0f, 1.0f), 2.0f, XMFLOAT3(0.0f, -0.33f,  0.5f) },
+	{ XMFLOAT2(0.0f, 1.0f), 2.0f, XMFLOAT3(-1.0f, -0.33f,  0.5f) },
+
+	// LOD 3 Tri
+	{ XMFLOAT2(0.5f, 0.0f), 3.0f, XMFLOAT3(0.5f,  0.33f,  0.5f) },
+	{ XMFLOAT2(1.0f, 1.0f), 3.0f, XMFLOAT3(1.0f, -0.33f,  0.5f) },
+	{ XMFLOAT2(0.0f, 1.0f), 3.0f, XMFLOAT3(0.0f, -0.33f,  0.5f) },
+
+	// LOD 4 Tri
+	{ XMFLOAT2(0.5f, 0.0f), 4.0f, XMFLOAT3(-0.5f, -0.34f,  0.5f) },
+	{ XMFLOAT2(1.0f, 1.0f), 4.0f, XMFLOAT3(0.0f, -1.00f,  0.5f) },
+	{ XMFLOAT2(0.0f, 1.0f), 4.0f, XMFLOAT3(-1.0f, -1.00f,  0.5f) },
+
+	// LOD 5 Tri
+	{ XMFLOAT2(0.5f, 0.0f), 5.0f, XMFLOAT3(0.5f, -0.34f,  0.5f) },
+	{ XMFLOAT2(1.0f, 1.0f), 5.0f, XMFLOAT3(1.0f, -1.00f,  0.5f) },
+	{ XMFLOAT2(0.0f, 1.0f), 5.0f, XMFLOAT3(0.0f, -1.00f,  0.5f) },
 };
 
-void CreateAPPSpecificResource() {
 
+static UINT m_nMostDetailedMip = 0;
+static           ID3D11Texture2D*            m_pTex = nullptr ;
+static           ID3D11ShaderResourceView*   m_pView = nullptr ;
+
+
+void CreateAPPSpecificResource() {
+    HRESULT hr = S_OK;
+    D3D11_TEXTURE2D_DESC  Desc;
+    ZeroMemory( &Desc,  sizeof( Desc ) );
+    Desc.ArraySize        = 1;
+    Desc.MipLevels        = NumMips;
+    Desc.Width            = (1 << NumMips);
+    Desc.Height           = (1 << NumMips);
+    Desc.Format           = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    Desc.MiscFlags        = D3D11_RESOURCE_MISC_RESOURCE_CLAMP;
+    Desc.BindFlags        = (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+    Desc.SampleDesc.Count = 1;
+	hr = g_device->CreateTexture2D( &Desc, NULL, &m_pTex );
+    assert(SUCCEEDED(hr));
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC  srvDesc;
+    D3D11_RENDER_TARGET_VIEW_DESC    rtvDesc;
+
+    ZeroMemory( &srvDesc, sizeof( srvDesc ) );
+    ZeroMemory( &rtvDesc, sizeof( rtvDesc ) );
+
+    srvDesc.Format                    = DXGI_FORMAT_UNKNOWN;
+    srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MostDetailedMip = m_nMostDetailedMip;
+	// all of miplevel starting from the most detailed will be used
+    srvDesc.Texture2D.MipLevels       = -1;
+
+	hr = g_device->CreateShaderResourceView( m_pTex, &srvDesc, &m_pView );
+    assert(SUCCEEDED(hr));
+
+    rtvDesc.Format        = DXGI_FORMAT_UNKNOWN;
+    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+    
+    for( UINT i = 0; i < NumMips; ++i )
+    {
+        ID3D11RenderTargetView* pRTV = NULL;
+        rtvDesc.Texture2D.MipSlice   = i;
+
+		assert(SUCCEEDED(hr));
+		g_device->CreateRenderTargetView( m_pTex, &rtvDesc, &pRTV );
+		assert(SUCCEEDED(hr));
+		g_deviceContext->ClearRenderTargetView( pRTV, &Colors[i][0] );
+    }
 }
 
+ID3D11SamplerState* pSamplerState;
 void SetAppSpecificCommand()
 {
-   	g_deviceContext->Draw(3, 0);
+
+	#define FLT_MAX          3.402823466e+38F        // max value
+
+	HRESULT hr = S_OK;
+	D3D11_SAMPLER_DESC  sDesc;
+	ZeroMemory(&sDesc, sizeof(sDesc));
+
+	sDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+	sDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	sDesc.MaxAnisotropy = 16;
+	sDesc.MaxLOD = FLT_MAX;
+
+	hr = g_device->CreateSamplerState(&sDesc, &pSamplerState);
+	assert(SUCCEEDED(hr));
+
+	g_deviceContext->PSSetSamplers(0, 1, &pSamplerState);
+	g_deviceContext->GSSetShader(NULL, NULL, 0);
+	g_deviceContext->OMSetBlendState(NULL, NULL, 0xffffffff);
+    g_deviceContext->PSSetShaderResources( 0, 1, &m_pView );
+
+    ID3D11RasterizerState* pRState = NULL;
+    D3D11_RASTERIZER_DESC rasterizer;
+    rasterizer.FillMode              = D3D11_FILL_SOLID;
+    rasterizer.CullMode              = D3D11_CULL_NONE;
+    rasterizer.FrontCounterClockwise = TRUE;
+    rasterizer.DepthBias             = 0;
+    rasterizer.DepthBiasClamp        = 0;
+    rasterizer.SlopeScaledDepthBias  = 0;
+    rasterizer.DepthClipEnable       = FALSE;
+    rasterizer.ScissorEnable         = FALSE;
+    rasterizer.MultisampleEnable     = FALSE;
+    rasterizer.AntialiasedLineEnable = FALSE;
+
+    hr = g_device->CreateRasterizerState(&rasterizer, &pRState);
+    assert(SUCCEEDED(hr));
+    g_deviceContext->RSSetState(pRState);
+
+	g_deviceContext->SetResourceMinLOD( m_pTex, 0.0f);			
+   	g_deviceContext->Draw(6 * 3, 0);
 }
 
 void CreateIndexBuffer()
@@ -59,40 +194,40 @@ void CreateIndexBuffer()
 
 void CreateVertexBufferAndLayout()
 {
-    Vertex v[] =
-	{
-		Vertex(-0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f), //Center Point
-		Vertex( 0.0f,  0.5f, 1.0f, 0.0f, 1.0f, 0.0f), //Center Point
-		Vertex( 0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f), //Center Point
-	};
-
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
 
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	vertexBufferDesc.ByteWidth = sizeof(Vertex) * ARRAYSIZE(v);
+	vertexBufferDesc.ByteWidth = sizeof(Vertex) * ARRAYSIZE(vertex);
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.CPUAccessFlags = 0;
 	vertexBufferDesc.MiscFlags = 0;
 
 	D3D11_SUBRESOURCE_DATA vertexBufferData;
 	ZeroMemory(&vertexBufferData, sizeof(vertexBufferData));
-	vertexBufferData.pSysMem = v;
+	vertexBufferData.pSysMem = vertex;
 
 	HRESULT hr = g_device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &g_vertexBuffer);
     assert(SUCCEEDED(hr));
 
     D3D11_INPUT_ELEMENT_DESC layout[] =
 	{
-		{"POSITION", 0, DXGI_FORMAT::DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_CLASSIFICATION::D3D11_INPUT_PER_VERTEX_DATA, 0  },
-		{"COLOR", 0, DXGI_FORMAT::DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_CLASSIFICATION::D3D11_INPUT_PER_VERTEX_DATA, 0  },
+	{ "texcoord", 0,	DXGI_FORMAT_R32G32_FLOAT,	0,	0,								D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "lod",      0,	DXGI_FORMAT_R32_FLOAT,		0,	D3D11_APPEND_ALIGNED_ELEMENT,	D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "position", 0,	DXGI_FORMAT_R32G32B32_FLOAT,0,	D3D11_APPEND_ALIGNED_ELEMENT,	D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
     UINT numElements = ARRAYSIZE(layout);
     hr = g_device->CreateInputLayout(layout, numElements, pVSCode->GetBufferPointer(), pVSCode->GetBufferSize(), &g_inputLayout);
     assert(SUCCEEDED(hr));
-
-
 }
+
+
+
+
+
+
+
+
 
 /***********************************************************************/
 void render() 

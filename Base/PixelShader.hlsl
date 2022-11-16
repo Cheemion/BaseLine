@@ -1,11 +1,21 @@
-struct PS_INPUT
-{
-    float4 inPosition : SV_POSITION;
-    float3 inColor : COLOR;
-};
-
-float4 main(PS_INPUT input) : SV_TARGET
-{
-    return float4(input.inColor, 1.0f);
-}
-
+   struct PSIn                                                                 
+   {                                                                          
+     float2 tex : TEXCOORD;                                                    
+     float  lod : LOD;                                                        
+    };                                                                         
+                                                                               
+   struct PSOut                                                                
+    {                                                                          
+     float4 color : SV_Target;                                                
+    };                                                                         
+                                                                              
+    sampler    theSampler;                                                    
+    texture2D  theTexture;                                                    
+                                                                               
+    PSOut main( in PSIn input )                                                
+    {                                                                         
+     PSOut output;                                                            
+     output.color = theTexture.SampleLevel(theSampler, input.tex, input.lod);  
+     return output;                                                           
+    }                                                                          
+        
