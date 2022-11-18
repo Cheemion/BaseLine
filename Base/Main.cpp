@@ -3,6 +3,7 @@
 #include <d3dcompiler.h>
 #include <cassert>
 #include <DirectXMath.h>
+#include "Util.h"
 #pragma comment(lib,"d3d11.lib")
 #pragma comment(lib,"d3dcompiler.lib")
 #pragma comment(lib,"DXGI.lib")
@@ -13,12 +14,13 @@
 
 static constexpr UINT32                      g_WIDTH              = 800;
 static constexpr UINT32                      g_HEIGHT             = 800;
-static constexpr D3D_DRIVER_TYPE             g_DriverType         = D3D_DRIVER_TYPE_HARDWARE;
+static constexpr D3D_DRIVER_TYPE             g_DriverType         = D3D_DRIVER_TYPE_REFERENCE;
 static           HWND                        g_hwnd               = nullptr;
 static           IDXGISwapChain*             g_swapchain          = nullptr;
 static           ID3D11Device*               g_device             = nullptr;
 static           ID3D11DeviceContext*        g_deviceContext      = nullptr;
 static           ID3D11RenderTargetView*     g_renderTargetView   = nullptr;
+static           ID3D11RenderTargetView*     g_renderTargetView_output   = nullptr;
 static           ID3D11RasterizerState*      g_rasterizerState    = nullptr ;
 static           ID3D11DepthStencilState*    g_depthStencialState = nullptr;
 static           ID3D11DepthStencilView*     g_depthStencialView  = nullptr ;
@@ -30,6 +32,11 @@ static           ID3D11Buffer*               g_indexBuffer        = nullptr;
 static           ID3D11InputLayout*          g_inputLayout        = nullptr;
 static           ID3D10Blob*                 pVSCode              = nullptr;
 static           ID3D10Blob*                 pPSCode              = nullptr;
+static           ID3D11Texture2D*            m_stagingTexture     = nullptr;
+static           ID3D11Texture2D*            m_backBuffer         = nullptr;
+static	         string                      g_outputFile         = "";
+static	         bool                        g_isOutput           = false;
+
 /*
 below will be modified according to app's needs
 *******************************************************************************1
@@ -90,7 +97,7 @@ Vertex vertex[] =
 };
 
 
-static UINT m_nMostDetailedMip = 0;
+static           UINT						 m_nMostDetailedMip = 0;
 static           ID3D11Texture2D*            m_pTex = nullptr ;
 static           ID3D11ShaderResourceView*   m_pView = nullptr ;
 
@@ -134,8 +141,9 @@ void CreateAPPSpecificResource() {
         rtvDesc.Texture2D.MipSlice   = i;
 
 		assert(SUCCEEDED(hr));
-		g_device->CreateRenderTargetView( m_pTex, &rtvDesc, &pRTV );
+		hr = g_device->CreateRenderTargetView( m_pTex, &rtvDesc, &pRTV );
 		assert(SUCCEEDED(hr));
+		assert(pRTV != NULL );
 		g_deviceContext->ClearRenderTargetView( pRTV, &Colors[i][0] );
     }
 }
@@ -182,8 +190,12 @@ void SetAppSpecificCommand()
     hr = g_device->CreateRasterizerState(&rasterizer, &pRState);
     assert(SUCCEEDED(hr));
     g_deviceContext->RSSetState(pRState);
-
-	g_deviceContext->SetResourceMinLOD( m_pTex, 0.0f);			
+	static float temp = 1.0;
+	if (temp > 2.0)
+		exit(0);
+	temp = temp + 0.05;
+	g_deviceContext->SetResourceMinLOD(m_pTex, temp);
+	g_outputFile = std::to_string(temp) +  "_REF.bmp";
    	g_deviceContext->Draw(6 * 3, 0);
 }
 
@@ -191,6 +203,9 @@ void CreateIndexBuffer()
 {
 
 }
+
+
+
 
 void CreateVertexBufferAndLayout()
 {
@@ -223,21 +238,30 @@ void CreateVertexBufferAndLayout()
 
 
 
+void SaveData() {
+	g_deviceContext->CopyResource(m_stagingTexture, m_backBuffer);
+	g_deviceContext->Flush();
+	D3D11_MAPPED_SUBRESOURCE mappedRenderTarget;
+	HRESULT hr = g_deviceContext->Map(m_stagingTexture, 0, D3D11_MAP_READ, 0, &mappedRenderTarget);
+    assert(SUCCEEDED(hr));
+	D3D11_TEXTURE2D_DESC textureDesc;
+	m_stagingTexture->GetDesc(&textureDesc);
+	SaveDataToFile(g_outputFile, textureDesc, mappedRenderTarget);
+	g_deviceContext->Unmap(m_stagingTexture, 0);
+	g_deviceContext->Flush();
 
-
-
-
-
-
+}
 /***********************************************************************/
 void render() 
 {
 
     HRESULT hr = S_OK;
     /* SetRenderTargets */
-	g_deviceContext->OMSetRenderTargets(1, &g_renderTargetView, g_depthStencialView);
+	if(g_isOutput)
+		g_deviceContext->OMSetRenderTargets(1, &g_renderTargetView_output, g_depthStencialView);
+	else 
+		g_deviceContext->OMSetRenderTargets(1, &g_renderTargetView, g_depthStencialView);
     assert(SUCCEEDED(hr));
-
     /* Create depth stencil state for deviceContext*/
 	D3D11_DEPTH_STENCIL_DESC depthstencildesc;
 	ZeroMemory(&depthstencildesc, sizeof(D3D11_DEPTH_STENCIL_DESC));
@@ -283,8 +307,12 @@ void render()
 	g_deviceContext->IASetVertexBuffers(0, 1, &g_vertexBuffer, &stride, &offset);
 
     SetAppSpecificCommand();
+	if (g_isOutput)
+		SaveData();
 	g_swapchain->Present(1, NULL);
+
 }
+
 void CreateOnceAndForAllResource()
 {
     /**
@@ -322,14 +350,25 @@ void CreateOnceAndForAllResource()
 										NULL, //Supported feature level
 										&g_deviceContext); //Device Context Address
     assert(SUCCEEDED(hr));
-    ID3D11Texture2D* backBuffer = nullptr;
-    hr = g_swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&backBuffer));                                  
+    hr = g_swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&m_backBuffer));                                  
     assert(SUCCEEDED(hr));
-    g_device->CreateRenderTargetView(backBuffer, NULL, &g_renderTargetView);
+    hr = g_device->CreateRenderTargetView(m_backBuffer, NULL, &g_renderTargetView);
     assert(SUCCEEDED(hr));
 
-
-
+	
+	//create output rendertargetView
+	D3D11_TEXTURE2D_DESC desc = { 0 };
+	desc.Width = g_WIDTH ;
+	desc.Height = g_HEIGHT;
+	desc.ArraySize = 1;
+	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Quality = 0;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+	hr = g_device->CreateTexture2D(&desc, nullptr, &m_backBuffer);
+    assert(SUCCEEDED(hr));
+	hr = g_device->CreateRenderTargetView(m_backBuffer, nullptr, &g_renderTargetView_output);
+    assert(SUCCEEDED(hr));
 
     /* Describe our Depth/Stencil Buffer */
 	D3D11_TEXTURE2D_DESC depthStencilBufferDesc;
@@ -344,12 +383,27 @@ void CreateOnceAndForAllResource()
 	depthStencilBufferDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 	depthStencilBufferDesc.CPUAccessFlags = 0;
 	depthStencilBufferDesc.MiscFlags = 0;
-    g_device->CreateTexture2D(&depthStencilBufferDesc, NULL, &g_depthStencialBuffer);
+    hr = g_device->CreateTexture2D(&depthStencilBufferDesc, NULL, &g_depthStencialBuffer);
     assert(SUCCEEDED(hr));
 
     /* createDepthStencialView */
-	g_device->CreateDepthStencilView(g_depthStencialBuffer, NULL, &g_depthStencialView);
+	hr = g_device->CreateDepthStencilView(g_depthStencialBuffer, NULL, &g_depthStencialView);
     assert(SUCCEEDED(hr));
+
+	{
+	D3D11_TEXTURE2D_DESC desc = { 0 };
+	desc.Width = g_WIDTH;
+	desc.Height = g_HEIGHT;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Quality = 0;
+	desc.Usage = D3D11_USAGE_STAGING;
+	desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	hr = g_device->CreateTexture2D(&desc, nullptr, &m_stagingTexture);
+    assert(SUCCEEDED(hr));
+	}
+
 }
 
 void CreateVertexShader() 
@@ -408,7 +462,7 @@ void CreateWindows(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine,
     g_hwnd = CreateWindowEx(
                                 0,                              // Optional window styles.
                                 CLASS_NAME,                     // Window class
-                                L"BaseLine",                    // Window text
+                                L"Reference BaseLine",                    // Window text
                                 WS_OVERLAPPEDWINDOW,            // Window style
 
                                 // Size and position
@@ -423,6 +477,8 @@ void CreateWindows(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine,
 }
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
+
+
     CreateWindows(hInstance, hPrevInstance, pCmdLine, nCmdShow);
 	Initialize();
     MSG msg = { };

@@ -1,3 +1,4 @@
 ﻿  Main.cpp
-C:\Users\kimwang2\Desktop\Base\Base\Main.cpp(55,2): warning C4091: 'typedef ': ignored on left of 'Vertex' when no variable is declared
+C:\Users\kimwang2\Desktop\Base\Base\Main.cpp(62,2): warning C4091: 'typedef ': ignored on left of 'Vertex' when no variable is declared
+C:\Users\kimwang2\Desktop\Base\Base\Main.cpp(196,14): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
   Base.vcxproj -> C:\Users\kimwang2\Desktop\Base\x64\Debug\Base.exe
