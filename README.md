@@ -1,6 +1,2 @@
 # BaseLine
-# BaseLine
-# Baseline
-# BaseLine
-# BaseLine
-# Baseline
+For quickly build up an Direct11 APP.
