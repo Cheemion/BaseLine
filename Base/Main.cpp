@@ -219,7 +219,13 @@ void CreateOnceAndForAllResource()
 
 void CreateVertexShader() 
 {
-    HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\vertexshader.cso", &pVSCode);
+    HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\VertexShader.cso", &pVSCode);
+	if (!SUCCEEDED(hr)) {
+		hr = D3DReadFileToBlob(L"..\\x64\\Release\\VertexShader.cso", &pVSCode);
+	}
+	if (!SUCCEEDED(hr)) {
+		hr = D3DReadFileToBlob(L"\\VertexShader.cso", &pVSCode);
+	}
     assert(SUCCEEDED(hr));
     hr = g_device->CreateVertexShader(pVSCode->GetBufferPointer(), pVSCode->GetBufferSize(), NULL, &g_VS);
     assert(SUCCEEDED(hr));
@@ -227,7 +233,13 @@ void CreateVertexShader()
 
 void CreatePixelShader()
 {
-    HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\pixelshader.cso", &pPSCode);
+    HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\PixelShader.cso", &pPSCode);
+	if (!SUCCEEDED(hr)) {
+		hr = D3DReadFileToBlob(L"..\\x64\\Release\\PixelShader.cso", &pPSCode);
+	}
+	if (!SUCCEEDED(hr)) {
+		hr = D3DReadFileToBlob(L"\\PixelShader.cso", &pPSCode);
+	}
     assert(SUCCEEDED(hr));
     hr = g_device->CreatePixelShader(pPSCode->GetBufferPointer(), pPSCode->GetBufferSize(), NULL, &g_PS);
     assert(SUCCEEDED(hr));
