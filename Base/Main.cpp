@@ -224,7 +224,7 @@ void CreateVertexShader()
 		hr = D3DReadFileToBlob(L"..\\x64\\Release\\VertexShader.cso", &pVSCode);
 	}
 	if (!SUCCEEDED(hr)) {
-		hr = D3DReadFileToBlob(L"\\VertexShader.cso", &pVSCode);
+		hr = D3DReadFileToBlob(L".\\VertexShader.cso", &pVSCode);
 	}
     assert(SUCCEEDED(hr));
     hr = g_device->CreateVertexShader(pVSCode->GetBufferPointer(), pVSCode->GetBufferSize(), NULL, &g_VS);
@@ -238,7 +238,7 @@ void CreatePixelShader()
 		hr = D3DReadFileToBlob(L"..\\x64\\Release\\PixelShader.cso", &pPSCode);
 	}
 	if (!SUCCEEDED(hr)) {
-		hr = D3DReadFileToBlob(L"\\PixelShader.cso", &pPSCode);
+		hr = D3DReadFileToBlob(L".\\PixelShader.cso", &pPSCode);
 	}
     assert(SUCCEEDED(hr));
     hr = g_device->CreatePixelShader(pPSCode->GetBufferPointer(), pPSCode->GetBufferSize(), NULL, &g_PS);
