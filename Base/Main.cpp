@@ -14,7 +14,7 @@
 
 static constexpr UINT32                      g_WIDTH              = 800;
 static constexpr UINT32                      g_HEIGHT             = 800;
-static constexpr D3D_DRIVER_TYPE             g_DriverType         = D3D_DRIVER_TYPE_REFERENCE;
+static constexpr D3D_DRIVER_TYPE             g_DriverType         = D3D_DRIVER_TYPE_HARDWARE;
 static           HWND                        g_hwnd               = nullptr;
 static           IDXGISwapChain*             g_swapchain          = nullptr;
 static           ID3D11Device*               g_device             = nullptr;
@@ -34,7 +34,7 @@ static           ID3D10Blob*                 pVSCode              = nullptr;
 static           ID3D10Blob*                 pPSCode              = nullptr;
 static           ID3D11Texture2D*            m_stagingTexture     = nullptr;
 static           ID3D11Texture2D*            m_backBuffer         = nullptr;
-static	         string                      g_outputFile         = "";
+static	         string                      g_outputFile         = "test.bmp";
 static	         bool                        g_isOutput           = false;
 
 /*
@@ -190,12 +190,6 @@ void SetAppSpecificCommand()
     hr = g_device->CreateRasterizerState(&rasterizer, &pRState);
     assert(SUCCEEDED(hr));
     g_deviceContext->RSSetState(pRState);
-	static float temp = 1.0;
-	if (temp > 2.0)
-		exit(0);
-	temp = temp + 0.05;
-	g_deviceContext->SetResourceMinLOD(m_pTex, temp);
-	g_outputFile = std::to_string(temp) +  "_REF.bmp";
    	g_deviceContext->Draw(6 * 3, 0);
 }
 
@@ -408,7 +402,15 @@ void CreateOnceAndForAllResource()
 
 void CreateVertexShader() 
 {
-    HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\vertexshader.cso", &pVSCode);
+    HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\VertexShader.cso", &pVSCode);
+	if (!SUCCEEDED(hr))
+	{
+		 hr = D3DReadFileToBlob(L"..\\x64\\Release\\VertexShader.cso", &pVSCode);
+	}
+	if (!SUCCEEDED(hr))
+	{
+		hr = D3DReadFileToBlob(L"\\VertexShader.cso", &pVSCode);
+	}
     assert(SUCCEEDED(hr));
     hr = g_device->CreateVertexShader(pVSCode->GetBufferPointer(), pVSCode->GetBufferSize(), NULL, &g_VS);
     assert(SUCCEEDED(hr));
@@ -416,7 +418,13 @@ void CreateVertexShader()
 
 void CreatePixelShader()
 {
-    HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\pixelshader.cso", &pPSCode);
+    HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\PixelShader.cso", &pPSCode);
+	if (!SUCCEEDED(hr)) {
+		hr = D3DReadFileToBlob(L"..\\x64\\Release\\PixelShader.cso", &pPSCode);
+	}
+	if (!SUCCEEDED(hr)) {
+		hr = D3DReadFileToBlob(L".\\PixelShader.cso", &pPSCode);
+	}
     assert(SUCCEEDED(hr));
     hr = g_device->CreatePixelShader(pPSCode->GetBufferPointer(), pPSCode->GetBufferSize(), NULL, &g_PS);
     assert(SUCCEEDED(hr));
