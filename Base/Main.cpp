@@ -418,7 +418,7 @@ void CreateVertexShader()
 	}
 	if (!SUCCEEDED(hr))
 	{
-		hr = D3DReadFileToBlob(L"\\VertexShader.cso", &pVSCode);
+		hr = D3DReadFileToBlob(L".\\VertexShader.cso", &pVSCode);
 	}
     assert(SUCCEEDED(hr));
     hr = g_device->CreateVertexShader(pVSCode->GetBufferPointer(), pVSCode->GetBufferSize(), NULL, &g_VS);
