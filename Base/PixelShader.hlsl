@@ -9,8 +9,8 @@
      float4 color : SV_Target;                                                
     };                                                                         
                                                                               
-    sampler    theSampler;                                                    
-    texture2D  theTexture;                                                    
+sampler theSampler : register(s0);
+texture2D theTexture : register(t0);
                                                                                
     PSOut main( in PSIn input )                                                
     {                                                                         
