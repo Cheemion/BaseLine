@@ -188,11 +188,33 @@ void SetAppSpecificCommand()
     hr = g_device->CreateRasterizerState(&rasterizer, &pRState);
     assert(SUCCEEDED(hr));
     g_deviceContext->RSSetState(pRState);
-   	g_deviceContext->Draw(6 * 3, 0);
+	g_deviceContext->DrawIndexed(18, 0, 0);
 }
 
 void CreateIndexBuffer()
 {
+	D3D11_BUFFER_DESC bd;
+	ZeroMemory(&bd, sizeof(bd));
+	// Create index buffer
+	WORD indices[] =
+	{
+		0,1,2,
+		3,4,5,
+		6,7,8,
+		9,10,11,
+		12,13,14,
+		15,16,17
+	};
+	bd.Usage = D3D11_USAGE_DEFAULT;
+	bd.ByteWidth = sizeof(WORD) * 18;        // 36 vertices needed for 12 triangles in a triangle list
+	bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	bd.CPUAccessFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA InitData;
+	ZeroMemory(&InitData, sizeof(InitData));
+	InitData.pSysMem = indices;
+
+	HRESULT hr = g_device->CreateBuffer(&bd, &InitData, &g_indexBuffer);
 
 }
 
@@ -281,6 +303,13 @@ void render()
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 	g_deviceContext->IASetVertexBuffers(0, 1, &g_vertexBuffer, &stride, &offset);
+
+	// Set index buffer
+	g_deviceContext->IASetIndexBuffer(g_indexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+	// Set primitive topology
+	g_deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 
     SetAppSpecificCommand();
 
