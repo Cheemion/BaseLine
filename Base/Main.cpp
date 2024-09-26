@@ -34,8 +34,6 @@ static           ID3D10Blob*                 pVSCode              = nullptr;
 static           ID3D10Blob*                 pPSCode              = nullptr;
 static           ID3D11Texture2D*            m_stagingTexture     = nullptr;
 static           ID3D11Texture2D*            m_backBuffer         = nullptr;
-static	         string                      g_outputFile         = "test.bmp";
-static	         bool                        g_isOutput           = false;
 
 /*
 below will be modified according to app's needs
@@ -232,29 +230,13 @@ void CreateVertexBufferAndLayout()
 
 
 
-void SaveData() {
-	g_deviceContext->CopyResource(m_stagingTexture, m_backBuffer);
-	g_deviceContext->Flush();
-	D3D11_MAPPED_SUBRESOURCE mappedRenderTarget;
-	HRESULT hr = g_deviceContext->Map(m_stagingTexture, 0, D3D11_MAP_READ, 0, &mappedRenderTarget);
-    assert(SUCCEEDED(hr));
-	D3D11_TEXTURE2D_DESC textureDesc;
-	m_stagingTexture->GetDesc(&textureDesc);
-	SaveDataToFile(g_outputFile, textureDesc, mappedRenderTarget);
-	g_deviceContext->Unmap(m_stagingTexture, 0);
-	g_deviceContext->Flush();
-
-}
 /***********************************************************************/
 void render() 
 {
 
     HRESULT hr = S_OK;
     /* SetRenderTargets */
-	if(g_isOutput)
-		g_deviceContext->OMSetRenderTargets(1, &g_renderTargetView_output, g_depthStencialView);
-	else 
-		g_deviceContext->OMSetRenderTargets(1, &g_renderTargetView, g_depthStencialView);
+	g_deviceContext->OMSetRenderTargets(1, &g_renderTargetView, g_depthStencialView);
     assert(SUCCEEDED(hr));
     /* Create depth stencil state for deviceContext*/
 	D3D11_DEPTH_STENCIL_DESC depthstencildesc;
@@ -301,10 +283,8 @@ void render()
 	g_deviceContext->IASetVertexBuffers(0, 1, &g_vertexBuffer, &stride, &offset);
 
     SetAppSpecificCommand();
-	if (g_isOutput)
-		SaveData();
-	g_swapchain->Present(1, NULL);
 
+	g_swapchain->Present(1, NULL);
 }
 
 void CreateOnceAndForAllResource()
