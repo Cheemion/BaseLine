@@ -17,8 +17,7 @@ Texture2D<float4> srvC : register(t0);
 PSOut main( in PSIn input )                                                
 {                                                                         
     PSOut output;                                                            
-    output.color = float4(input.pos.xyz, 1.0f);
-    //srvC.Sample(sampler1, input.pos.xy);
+    output.color = srvC.Sample(sampler1, input.tex.xy);
     return output;                                                           
 }                                                                          
         
