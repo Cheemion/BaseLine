@@ -20,20 +20,37 @@ static           IDXGISwapChain*             g_swapchain          = nullptr;
 static           ID3D11Device*               g_device             = nullptr;
 static           ID3D11DeviceContext*        g_deviceContext      = nullptr;
 static           ID3D11RenderTargetView*     g_renderTargetView   = nullptr;
-static           ID3D11RenderTargetView*     g_renderTargetView_output   = nullptr;
+
 static           ID3D11RasterizerState*      g_rasterizerState    = nullptr ;
 static           ID3D11DepthStencilState*    g_depthStencialState = nullptr;
 static           ID3D11DepthStencilView*     g_depthStencialView  = nullptr ;
 static           ID3D11Texture2D*            g_depthStencialBuffer= nullptr ;
 static           ID3D11VertexShader*         g_VS                 = nullptr;
 static           ID3D11PixelShader*          g_PS                 = nullptr;
+static           ID3D11ComputeShader*        g_CS = nullptr;
+
 static           ID3D11Buffer*               g_vertexBuffer       = nullptr;
 static           ID3D11Buffer*               g_indexBuffer        = nullptr;
 static           ID3D11InputLayout*          g_inputLayout        = nullptr;
 static           ID3D10Blob*                 pVSCode              = nullptr;
 static           ID3D10Blob*                 pPSCode              = nullptr;
-static           ID3D11Texture2D*            m_stagingTexture     = nullptr;
+static           ID3D10Blob*                 pCSCode              = nullptr;
 static           ID3D11Texture2D*            m_backBuffer         = nullptr;
+
+// UAV parameters
+static           ID3D11Texture2D* m_TextureA = nullptr;
+static           ID3D11Texture2D* m_TextureB = nullptr;
+static           ID3D11Texture2D* m_TextureC = nullptr;
+
+static           ID3D11RenderTargetView*    g_rtvA = nullptr;
+static           ID3D11RenderTargetView*    g_rtvB = nullptr;
+static           ID3D11RenderTargetView* g_rtvC = nullptr;
+
+static           ID3D11ShaderResourceView*  g_srvA = nullptr;
+static           ID3D11ShaderResourceView*  g_srvB = nullptr;
+static           ID3D11ShaderResourceView* g_srvC = nullptr;
+
+static           ID3D11UnorderedAccessView* g_uavC = nullptr;
 
 /*
 below will be modified according to app's needs
@@ -94,84 +111,71 @@ Vertex vertex[] =
 	{ XMFLOAT2(0.0f, 1.0f), 5.0f, XMFLOAT3(0.0f, -1.00f,  0.5f) },
 };
 
-
-static           UINT						 m_nMostDetailedMip = 0;
-static           ID3D11Texture2D*            m_pTex = nullptr ;
-static           ID3D11ShaderResourceView*   m_pView = nullptr ;
-
-
 void CreateAPPSpecificResource() {
     HRESULT hr = S_OK;
     D3D11_TEXTURE2D_DESC  Desc;
-    ZeroMemory( &Desc,  sizeof( Desc ) );
-    Desc.ArraySize        = 1;
-    Desc.MipLevels        = NumMips;
-    Desc.Width            = (1 << NumMips);
-    Desc.Height           = (1 << NumMips);
-    Desc.Format           = DXGI_FORMAT_R32G32B32A32_FLOAT;
-    Desc.MiscFlags        = D3D11_RESOURCE_MISC_RESOURCE_CLAMP;
-    Desc.BindFlags        = (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
-    Desc.SampleDesc.Count = 1;
-	hr = g_device->CreateTexture2D( &Desc, NULL, &m_pTex );
-    assert(SUCCEEDED(hr));
 
-    D3D11_SHADER_RESOURCE_VIEW_DESC  srvDesc;
-    D3D11_RENDER_TARGET_VIEW_DESC    rtvDesc;
+	// CreateTexutreA, TextureB for computer shader.
+	ZeroMemory(&Desc, sizeof(Desc));
+	Desc.ArraySize = 1;
+	Desc.MipLevels = 1;
+	Desc.Width = g_WIDTH;
+	Desc.Height = g_HEIGHT;
+	Desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	Desc.MiscFlags = 0;
+	Desc.BindFlags = (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS);
+	Desc.Usage = D3D11_USAGE_DEFAULT;
+	Desc.SampleDesc.Count = 1;
+	Desc.SampleDesc.Quality = 0;
+	hr = g_device->CreateTexture2D(&Desc, NULL, &m_TextureA);
+	assert(SUCCEEDED(hr));
+	hr = g_device->CreateTexture2D(&Desc, NULL, &m_TextureB);
+	assert(SUCCEEDED(hr));
 
-    ZeroMemory( &srvDesc, sizeof( srvDesc ) );
-    ZeroMemory( &rtvDesc, sizeof( rtvDesc ) );
+	hr = g_device->CreateTexture2D(&Desc, NULL, &m_TextureC);
+	assert(SUCCEEDED(hr));
+	
+	hr = g_device->CreateRenderTargetView(m_TextureA, nullptr, &g_rtvA);
+	assert(SUCCEEDED(hr));
 
-    srvDesc.Format                    = DXGI_FORMAT_UNKNOWN;
-    srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MostDetailedMip = m_nMostDetailedMip;
-	// all of miplevel starting from the most detailed will be used
-    srvDesc.Texture2D.MipLevels       = -1;
+	hr = g_device->CreateRenderTargetView(m_TextureB, nullptr, &g_rtvB);
+	assert(SUCCEEDED(hr));
+	hr = g_device->CreateRenderTargetView(m_TextureC, nullptr, &g_rtvC);
+	assert(SUCCEEDED(hr));
+	hr = g_device->CreateShaderResourceView(m_TextureA, nullptr, &g_srvA);
+	assert(SUCCEEDED(hr));
 
-	hr = g_device->CreateShaderResourceView( m_pTex, &srvDesc, &m_pView );
-    assert(SUCCEEDED(hr));
+	hr = g_device->CreateShaderResourceView(m_TextureB, nullptr, &g_srvB);
+	assert(SUCCEEDED(hr));
 
-    rtvDesc.Format        = DXGI_FORMAT_UNKNOWN;
-    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-    
-    for( UINT i = 0; i < NumMips; ++i )
-    {
-        ID3D11RenderTargetView* pRTV = NULL;
-        rtvDesc.Texture2D.MipSlice   = i;
+	
+	hr = g_device->CreateShaderResourceView(m_TextureC, nullptr, &g_srvC);
+	assert(SUCCEEDED(hr));
 
-		assert(SUCCEEDED(hr));
-		hr = g_device->CreateRenderTargetView( m_pTex, &rtvDesc, &pRTV );
-		assert(SUCCEEDED(hr));
-		assert(pRTV != NULL );
-		g_deviceContext->ClearRenderTargetView( pRTV, &Colors[i][0] );
-    }
+	hr = g_device->CreateUnorderedAccessView(m_TextureC, nullptr, &g_uavC);
+	assert(SUCCEEDED(hr));
 }
 
-ID3D11SamplerState* pSamplerState;
+ID3D11SamplerState* pSamplerState1;
+
 void SetAppSpecificCommand()
 {
-
 	#define FLT_MAX          3.402823466e+38F        // max value
-
 	HRESULT hr = S_OK;
+
+
 	D3D11_SAMPLER_DESC  sDesc;
 	ZeroMemory(&sDesc, sizeof(sDesc));
-
-	sDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+	sDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 	sDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
 	sDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
 	sDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 	sDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-	sDesc.MaxAnisotropy = 16;
-	sDesc.MaxLOD = FLT_MAX;
-
-	hr = g_device->CreateSamplerState(&sDesc, &pSamplerState);
+	hr = g_device->CreateSamplerState(&sDesc, &pSamplerState1);
 	assert(SUCCEEDED(hr));
+	g_deviceContext->PSSetSamplers(0, 1, &pSamplerState1);
 
-	g_deviceContext->PSSetSamplers(0, 1, &pSamplerState);
-	g_deviceContext->GSSetShader(NULL, NULL, 0);
 	g_deviceContext->OMSetBlendState(NULL, NULL, 0xffffffff);
-    g_deviceContext->PSSetShaderResources( 0, 1, &m_pView );
-
     ID3D11RasterizerState* pRState = NULL;
     D3D11_RASTERIZER_DESC rasterizer;
     rasterizer.FillMode              = D3D11_FILL_SOLID;
@@ -188,7 +192,13 @@ void SetAppSpecificCommand()
     hr = g_device->CreateRasterizerState(&rasterizer, &pRState);
     assert(SUCCEEDED(hr));
     g_deviceContext->RSSetState(pRState);
+
+	g_deviceContext->OMSetRenderTargetsAndUnorderedAccessViews(1, &g_renderTargetView, g_depthStencialView, 0, 0, NULL, NULL);
+	g_deviceContext->PSSetShaderResources(0, 1, &g_srvC);
 	g_deviceContext->DrawIndexed(18, 0, 0);
+	ID3D11ShaderResourceView* temp = NULL;
+	g_deviceContext->PSSetShaderResources(0, 1, &temp);
+
 }
 
 void CreateIndexBuffer()
@@ -257,6 +267,24 @@ void render()
 {
 
     HRESULT hr = S_OK;
+	float bgcolor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	g_deviceContext->ClearRenderTargetView(g_renderTargetView, bgcolor);
+	g_deviceContext->ClearRenderTargetView(g_rtvC, bgcolor);
+
+
+	float bgcolorA[] = { 0.0f, 0.0f, 0.5f, 1.0f };
+	g_deviceContext->ClearRenderTargetView(g_rtvA, bgcolorA);
+	float bgcolorB[] = { 0.5f, 0.0f, 0.0f, 1.0f };
+	g_deviceContext->ClearRenderTargetView(g_rtvB, bgcolorB);
+	g_deviceContext->CSSetShaderResources(0, 1, &g_srvA);
+	g_deviceContext->CSSetShaderResources(1, 1, &g_srvB);
+	g_deviceContext->CSSetUnorderedAccessViews(0, 1, &g_uavC, NULL);
+	g_deviceContext->CSSetShader(g_CS, NULL, 0);
+	g_deviceContext->Dispatch(50, 50, 1);
+	ID3D11UnorderedAccessView* temp = NULL;
+	g_deviceContext->CSSetUnorderedAccessViews(0, 1, &temp, NULL);
+
+
     /* SetRenderTargets */
 	g_deviceContext->OMSetRenderTargets(1, &g_renderTargetView, g_depthStencialView);
     assert(SUCCEEDED(hr));
@@ -288,11 +316,9 @@ void render()
 	hr = g_device->CreateRasterizerState(&rasterizerDesc, &g_rasterizerState);
     assert(SUCCEEDED(hr));
 
-	float bgcolor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-	g_deviceContext->ClearRenderTargetView(g_renderTargetView, bgcolor);
+
 	g_deviceContext->ClearDepthStencilView(g_depthStencialView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 	g_deviceContext->OMSetDepthStencilState(g_depthStencialState, 0);
-
 
 	g_deviceContext->IASetInputLayout(g_inputLayout);
 	g_deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -309,7 +335,6 @@ void render()
 
 	// Set primitive topology
 	g_deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
 
     SetAppSpecificCommand();
 
@@ -341,9 +366,9 @@ void CreateOnceAndForAllResource()
 	scd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
     HRESULT hr;
 	hr = D3D11CreateDeviceAndSwapChain(	NULL, //IDXGI Adapter
-									g_DriverType,
+										g_DriverType,
 										NULL, //FOR SOFTWARE DRIVER TYPE
-										NULL, //FLAGS FOR RUNTIME LAYERS
+		D3D11_CREATE_DEVICE_DEBUG, //FLAGS FOR RUNTIME LAYERS
 										NULL, //FEATURE LEVELS ARRAY
 										0, //# OF FEATURE LEVELS IN ARRAY
 										D3D11_SDK_VERSION,
@@ -356,21 +381,6 @@ void CreateOnceAndForAllResource()
     hr = g_swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&m_backBuffer));                                  
     assert(SUCCEEDED(hr));
     hr = g_device->CreateRenderTargetView(m_backBuffer, NULL, &g_renderTargetView);
-    assert(SUCCEEDED(hr));
-
-	
-	//create output rendertargetView
-	D3D11_TEXTURE2D_DESC desc = { 0 };
-	desc.Width = g_WIDTH ;
-	desc.Height = g_HEIGHT;
-	desc.ArraySize = 1;
-	desc.SampleDesc.Count = 1;
-	desc.SampleDesc.Quality = 0;
-	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-	hr = g_device->CreateTexture2D(&desc, nullptr, &m_backBuffer);
-    assert(SUCCEEDED(hr));
-	hr = g_device->CreateRenderTargetView(m_backBuffer, nullptr, &g_renderTargetView_output);
     assert(SUCCEEDED(hr));
 
     /* Describe our Depth/Stencil Buffer */
@@ -392,21 +402,6 @@ void CreateOnceAndForAllResource()
     /* createDepthStencialView */
 	hr = g_device->CreateDepthStencilView(g_depthStencialBuffer, NULL, &g_depthStencialView);
     assert(SUCCEEDED(hr));
-
-	{
-	D3D11_TEXTURE2D_DESC desc = { 0 };
-	desc.Width = g_WIDTH;
-	desc.Height = g_HEIGHT;
-	desc.ArraySize = 1;
-	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	desc.SampleDesc.Count = 1;
-	desc.SampleDesc.Quality = 0;
-	desc.Usage = D3D11_USAGE_STAGING;
-	desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-	hr = g_device->CreateTexture2D(&desc, nullptr, &m_stagingTexture);
-    assert(SUCCEEDED(hr));
-	}
-
 }
 
 void CreateVertexShader() 
@@ -440,11 +435,28 @@ void CreatePixelShader()
     // Pixel shader to render the scene containing lod value
 }
 
+void CreateComputerShader()
+{
+	HRESULT hr = D3DReadFileToBlob(L"..\\x64\\Debug\\ComputerShader.cso", &pCSCode);
+	if (!SUCCEEDED(hr)) {
+		hr = D3DReadFileToBlob(L"..\\x64\\Release\\ComputerShader.cso", &pCSCode);
+	}
+	if (!SUCCEEDED(hr)) {
+		hr = D3DReadFileToBlob(L".\\ComputerShader.cso", &pCSCode);
+	}
+	assert(SUCCEEDED(hr));
+	hr = g_device->CreateComputeShader(pCSCode->GetBufferPointer(), pCSCode->GetBufferSize(), NULL, &g_CS);
+	assert(SUCCEEDED(hr));
+	// Pixel shader to render the scene containing lod value
+}
+
 void Initialize()
 {
     CreateOnceAndForAllResource();
     CreateVertexShader();
     CreatePixelShader();
+	CreateComputerShader();
+
     CreateVertexBufferAndLayout();
     CreateIndexBuffer();
     CreateAPPSpecificResource();
@@ -461,10 +473,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
 }
-
-
-
-
 
 void CreateWindows(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
     // Register the window class.
